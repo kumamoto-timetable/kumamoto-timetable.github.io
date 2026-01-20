@@ -22,12 +22,15 @@ body {
   .fromName {
     grid-area: 1 / 1 / 2 / 2;
   }
+
   .toName {
     grid-area: 2 / 1 / 3 / 2;
   }
+
   .exchange {
     grid-area: 1 / 2 / 3 / 3;
   }
+
   .print {
     grid-area: 1 / 3 / 3 / 3;
   }
@@ -57,5 +60,11 @@ body {
 @media print {
   body {
     zoom: 0.68;
+  }
+
+  .header_notice,
+  .controller,
+  .credit {
+    display: none !important;
   }
 }
