@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 // import Select from 'react-select'
 import * as Urql from 'urql'
+import { useReactToPrint } from 'react-to-print'
 
 import TextField from '@mui/material/TextField';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -17,11 +18,17 @@ import { pageView } from './google_analytics';
 
 import * as explanationIng from "../images/explanation.png"
 
-function printEvent(origin: string, destination: string) {
-  (window as any).gtag('event', 'print_timetable', { origin, destination })
-}
-
 function App() {
+  const componentRef = useRef();
+  const handlePrint = useReactToPrint({
+    content: () => componentRef.current,
+    onAfterPrint() {
+      if (selectedFrom === null || selectedTo === null) return
+
+      (window as any).gtag('event', 'print_timetable', { origin: selectedFrom.label, destination: selectedTo.label })
+    },
+  });
+
   const [userInputted, setUserInputted] = useState<boolean>(false)
 
   const defaultValues = useMemo(() => {
@@ -49,25 +56,6 @@ function App() {
 
   const [toSearchName, setToSearchName] = useState(defaultValues.toSearchName)
   const [selectedTo, setSelectedToKey] = useState<{ label: string; key: string; value: string[] } | null>(null)
-
-  // print callback用
-  const printSelectionRef = useRef<{ from: typeof selectedFrom; to: typeof selectedTo }>({ from: null, to: null })
-  useEffect(() => {
-    printSelectionRef.current = { from: selectedFrom, to: selectedTo }
-  }, [selectedFrom, selectedTo])
-  useEffect(() => {
-    const handleAfterPrint = () => {
-      const { from, to } = printSelectionRef.current
-      if (from === null || to === null) return
-
-      printEvent(from.label, to.label)
-    }
-
-    window.addEventListener("afterprint", handleAfterPrint)
-    return () => {
-      window.removeEventListener("afterprint", handleAfterPrint)
-    }
-  }, [])
 
   const handleExchange = useCallback(() => {
     setUserInputted(true)
@@ -227,7 +215,7 @@ function App() {
           value={selectedTo}
         />
         <button className='exchange' onClick={handleExchange}>⇅</button>
-        <button className='print' disabled={selectedFrom === null || selectedTo === null} onClick={window.print}>印刷する</button>
+        <button className='print' disabled={selectedFrom === null || selectedTo === null} onClick={handlePrint}>印刷する</button>
         <FormGroup style={{
           display: 'flex',
           flexDirection: 'row',
@@ -240,11 +228,13 @@ function App() {
       </div>
       {
         selectedFrom && selectedTo ?
-          <TimetableTable
-            fromStop={{ label: selectedFrom.label, key: selectedFrom.key, uids: selectedFrom.value }}
-            toStop={{ label: selectedTo.label, key: selectedTo.key, uids: selectedTo.value }}
-            checkboxes={{ destination: destinationCheckbox, routeId: routeIdCheckbox, companyName: companyNameCheckbox }}
-          /> :
+          <div ref={componentRef} >
+            <TimetableTable
+              fromStop={{ label: selectedFrom.label, key: selectedFrom.key, uids: selectedFrom.value }}
+              toStop={{ label: selectedTo.label, key: selectedTo.key, uids: selectedTo.value }}
+              checkboxes={{ destination: destinationCheckbox, routeId: routeIdCheckbox, companyName: companyNameCheckbox }}
+            />
+          </div> :
           <><img src={explanationIng} />
             <div className='credit'>開発：<a href='https://t-brain.jp/'>(株)トラフィックブレイン</a>　データ提供：<a href='https://jmpo.kumamoto-toshibus.co.jp/'>共同経営推進室(九州産交バス・産交バス・熊本バス・熊本電鉄・熊本都市バス)</a><br />
               このサービスは<a href='https://km.bus-vision.jp/kumamoto/view/opendataKuma.html'>熊本のバス5社のGTFSオープンデータ</a>を用いています。
