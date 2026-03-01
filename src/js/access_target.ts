@@ -25,7 +25,7 @@ const accessTargets = {
   },
   prod: {
     medas: {
-      url: 'https://api.norumes.cloud/v1/graphql',
+      url: 'https://api-norumes.momizi.codes/v1/graphql',
       accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ2ZXJzaW9uIjoxLCJ1aWQiOiJlNmVjODIyOS03ODFlLTRhYjMtODRkNS1kNmI3OTViZTEzNzUiLCJ0b2tlbiI6ImFjNGM1YzA3LTZjM2MtNGE1MC05YTVmLTkzNTUwOWE4YTlhMyIsImlhdCI6MTY4ODkxODQxOH0.Oc1AUVVIN3EUsad5Ii8yl34eYNBsujoHa7KxR3EMmkU',
     },
     agencyIds: [
