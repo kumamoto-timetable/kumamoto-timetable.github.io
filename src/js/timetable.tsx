@@ -1,55 +1,16 @@
-import dayjs from "dayjs";
-import utc from 'dayjs/plugin/utc'
-import React, { useEffect, useRef } from "react";
+import type { Dayjs } from "dayjs";
+import React from "react";
 import { useMemo } from "react";
 import { useQRCode } from 'next-qrcode';
-import holidayJp from '@holiday-jp/holiday_jp'
 
 import { useTimetableForBetweenStopsQuery } from "../graphql/generated/graphql";
 import { useTimetable } from "./use_timetable";
-import { timeStringToSeconds } from "./utils";
+import { getDepartureTime, getTravelTimeSeconds, nextServiceDate } from "./utils";
 
 import * as usageGuideImg from "../images/usage_guide.png"
 
-dayjs.extend(utc)
-
 function isNullable(v: unknown) {
   return v === undefined || v === null
-}
-
-const specialDays = [
-  '8/13',
-  '8/14',
-  '8/15',
-  '12/29',
-  '12/30',
-  '12/31',
-  '1/1',
-  '1/2',
-  '1/3',
-]
-
-function nextDay(type: 'weekday' | 'saturday' | 'holiday') {
-  const baseDate = new URL(location.href).searchParams.get('startDate')
-  let date = (baseDate ? dayjs(baseDate, 'YYYY-MM-DD') : dayjs()).startOf('day')
-  while (true) {
-    if (specialDays.includes(date.format('M/D'))) {
-      date = date.add(1, 'day')
-      continue
-    }
-
-    if (type === 'holiday') {
-      if (holidayJp.isHoliday(date.toDate()) || [0].includes(date.day())) break
-    } else if (type === 'weekday') {
-      if (holidayJp.isHoliday(date.toDate()) === false && [1, 2, 3, 4, 5].includes(date.day())) break
-    } else if (type === 'saturday') {
-      if (holidayJp.isHoliday(date.toDate()) === false && [6].includes(date.day())) break
-    }
-
-    date = date.add(1, 'day')
-  }
-
-  return date;
 }
 
 type Minute = {
@@ -92,31 +53,16 @@ function stopTimeTransform(trip: ReturnType<typeof useTimetableForBetweenStopsQu
   }
 }
 
-function transform(transit: ReturnType<typeof useTimetableForBetweenStopsQuery>[0]['data']['timetable']['edges'][number], firstTransit?: ReturnType<typeof useTimetableForBetweenStopsQuery>[0]['data']['timetable']['edges'][number]): Minute {
+function transform(transit: ReturnType<typeof useTimetableForBetweenStopsQuery>[0]['data']['timetable']['edges'][number], serviceDate: Dayjs): Minute {
   const fromStopTime = stopTimeTransform(transit.trip, transit.stopTimes[0])
   const toStopTime = stopTimeTransform(transit.trip, transit.stopTimes[1])
 
   const routeName = fromStopTime.route.longName ?? ''
   const routeIds = routeName.includes('：') ? routeName.split('：')[0].split('/') : []
 
-  const moveTimeSec = timeStringToSeconds(toStopTime.departure) - timeStringToSeconds(fromStopTime.departure)
-
-  let hour = 0
-  if (firstTransit) {
-    const firstFromStopTime = stopTimeTransform(firstTransit.trip, firstTransit.stopTimes[1])
-    const diffHour = dayjs(fromStopTime.departure).startOf('h').diff(dayjs(firstFromStopTime.departure).startOf('h'), 'hour')
-
-    hour = dayjs(firstFromStopTime.departure).hour() + diffHour
-  } else {
-    hour = dayjs(fromStopTime.departure).hour()
-  }
-
   return {
     uid: fromStopTime.uid,
-    departure: {
-      hour: hour,
-      minute: dayjs(fromStopTime.departure).minute(),
-    },
+    departure: getDepartureTime(fromStopTime.departure, serviceDate),
     routeIds: routeIds,
     route: {
       ids: routeIds,
@@ -130,7 +76,7 @@ function transform(transit: ReturnType<typeof useTimetableForBetweenStopsQuery>[
         code: fromStopTime.stop.platform.code
       }
     },
-    moveTimeSec: moveTimeSec,
+    moveTimeSec: getTravelTimeSeconds(fromStopTime.departure, toStopTime.departure),
   }
 }
 
@@ -225,21 +171,29 @@ export function TimetableTable(props: {
   checkboxes: { destination: boolean, routeId: boolean, companyName: boolean }
 }) {
   const { Canvas } = useQRCode();
+  const dates = useMemo(() => {
+    const baseDate = new URL(location.href).searchParams.get('startDate') ?? undefined
+    return {
+      weekday: nextServiceDate('weekday', baseDate),
+      saturday: nextServiceDate('saturday', baseDate),
+      holiday: nextServiceDate('holiday', baseDate),
+    }
+  }, [])
 
   const { timetable: monday } = useTimetable({
     fromStopUids: props.fromStop.uids,
     topStopUids: props.toStop.uids,
-    date: useMemo(() => nextDay('weekday').startOf('day'), [])
+    date: dates.weekday
   })
   const { timetable: saturday } = useTimetable({
     fromStopUids: props.fromStop.uids,
     topStopUids: props.toStop.uids,
-    date: useMemo(() => nextDay('saturday').startOf('day'), [])
+    date: dates.saturday
   })
   const { timetable: sunday } = useTimetable({
     fromStopUids: props.fromStop.uids,
     topStopUids: props.toStop.uids,
-    date: useMemo(() => nextDay('holiday').startOf('day'), [])
+    date: dates.holiday
   })
 
   const timetables = useMemo(() => {
@@ -247,9 +201,9 @@ export function TimetableTable(props: {
     if (monday.length === 0 && saturday.length === 0 && sunday.length === 0) return []
 
     const days = [
-      timetableArray((monday ?? []).map((transit) => transform(transit, monday[0]))) as TimeTableData[],
-      timetableArray((saturday ?? []).map((transit) => transform(transit, saturday[0]))) as TimeTableData[],
-      timetableArray((sunday ?? []).map((transit) => transform(transit, sunday[0]))) as TimeTableData[],
+      timetableArray((monday ?? []).map((transit) => transform(transit, dates.weekday))) as TimeTableData[],
+      timetableArray((saturday ?? []).map((transit) => transform(transit, dates.saturday))) as TimeTableData[],
+      timetableArray((sunday ?? []).map((transit) => transform(transit, dates.holiday))) as TimeTableData[],
     ]
 
     let minHour = 23
@@ -288,7 +242,7 @@ export function TimetableTable(props: {
       result.push([days[0][i][0], [days[0][i][1], days[1][i][1], days[2][i][1]]])
     ])
     return result
-  }, [monday, saturday, sunday])
+  }, [monday, saturday, sunday, dates])
 
   const moveCenterTimeSec = useMemo(() => {
     if (isNullable(monday) || isNullable(saturday) || isNullable(sunday)) return null
@@ -298,7 +252,7 @@ export function TimetableTable(props: {
         ...monday,
         ...saturday,
         ...sunday
-      ].map((transit) => transform(transit).moveTimeSec).sort((a, b) => a - b)
+      ].map((transit) => getTravelTimeSeconds(transit.stopTimes[0].departureTime, transit.stopTimes[1].departureTime)).sort((a, b) => a - b)
 
     const half = Math.floor(moveCenterTimes.length / 2);
 
@@ -368,13 +322,13 @@ export function TimetableTable(props: {
 
             <div className="table_header_col_wrap">
               <div className="table_header_col weekday">
-                <span className="day_name">平日</span><span className="day">（{nextDay('weekday').format('YYYY/MM/DD')}）</span>
+                <span className="day_name">平日</span><span className="day">（{dates.weekday.format('YYYY/MM/DD')}）</span>
               </div>
               <div className="table_header_col saturday">
-                <span className="day_name">土曜</span><span className="day">（{nextDay('saturday').format('YYYY/MM/DD')}）</span>
+                <span className="day_name">土曜</span><span className="day">（{dates.saturday.format('YYYY/MM/DD')}）</span>
               </div>
               <div className="table_header_col sunday">
-                <span className="day_name">日祝</span><span className="day">（{nextDay('holiday').format('YYYY/MM/DD')}）</span>
+                <span className="day_name">日祝</span><span className="day">（{dates.holiday.format('YYYY/MM/DD')}）</span>
               </div>
             </div>
 

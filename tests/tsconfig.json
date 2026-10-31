@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "commonjs",
+    "esModuleInterop": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "rootDir": "../src/js",
+    "outDir": "../.cache/tests"
+  },
+  "include": ["../src/js/utils.ts"]
+}

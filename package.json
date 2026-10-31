@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
+    "test": "tsc -p tests/tsconfig.json && node --test tests/timetable_time.test.cjs",
     "dev": "parcel serve src/index.html",
     "build:clean": "rimraf dist",
     "build:static": "parcel build src/index.html --public-url ./",
